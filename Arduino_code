@@ -9,7 +9,6 @@ const int BUTTON_SELECT = 4;
 const int TEMP_SENSOR_PIN = 5;
 const int HEATER_PIN = 6;
 const int VALVE_PIN = 7;
-const int BUZZER_PIN = 8;
 
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 OneWire oneWire(TEMP_SENSOR_PIN);
@@ -35,7 +34,6 @@ void setup() {
   pinMode(BUTTON_SELECT, INPUT_PULLUP);
   pinMode(HEATER_PIN, OUTPUT);
   pinMode(VALVE_PIN, OUTPUT);
-  pinMode(BUZZER_PIN, OUTPUT);
   digitalWrite(HEATER_PIN, LOW);
   digitalWrite(VALVE_PIN, LOW);
   lcd.init();
@@ -47,7 +45,6 @@ void setup() {
   delay(2000);
   lcd.clear();
   Serial.println("Система запущена!");
-  beep();
 }
 
 void loop() {
@@ -68,20 +65,16 @@ void readSensors() {
 
 void handleButtons() {
   if (buttonPressed(BUTTON_FORWARD)) {
-    beep();
     delay(300);
   }
   if (buttonPressed(BUTTON_BACK)) {
-    beep();
     delay(300);
   }
   if (buttonPressed(BUTTON_SELECT)) {
     if (currentMode == MODE_DISPLAY) {
       currentMode = MODE_SET_TEMP;
-      beep(2);
     } else if (currentMode == MODE_SET_TEMP) {
       currentMode = MODE_DISPLAY;
-      beep(3);
     }
     delay(300);
   }
@@ -104,7 +97,7 @@ void controlWateringAndHeating() {
     startWatering();
     wateringActive = true;
     lastWateringTime = currentTime;
-  } else if (wateringActive && (currentTime - lastWateringTime > 300000)) { // полив 5 минут
+  } else if (wateringActive && (currentTime - lastWateringTime > 300000)) {
     stopWatering();
     wateringActive = false;
   }
@@ -112,13 +105,11 @@ void controlWateringAndHeating() {
 
 void startWatering() {
   digitalWrite(VALVE_PIN, HIGH);
-  beep();
   Serial.println("ПОЛИВ: НАЧАТ");
 }
 
 void stopWatering() {
   digitalWrite(VALVE_PIN, LOW);
-  beep(2);
   Serial.println("ПОЛИВ: ОСТАНОВЛЕН");
 }
 
@@ -137,7 +128,7 @@ void updateDisplay() {
     } else {
       lcd.print("   ");
     }
-    if (digitalWrite(VALVE_PIN) == HIGH) {
+    if (digitalRead(VALVE_PIN) == HIGH) {
       lcd.print("[W]");
     }
   } else if (currentMode == MODE_SET_TEMP) {
@@ -146,14 +137,5 @@ void updateDisplay() {
     lcd.print("C");
     lcd.setCursor(0, 1);
     lcd.print("Нажми выбор->OK");
-  }
-}
-
-void beep(int count = 1) {
-  for (int i = 0; i < count; i++) {
-    digitalWrite(BUZZER_PIN, HIGH);
-    delay(100);
-    digitalWrite(BUZZER_PIN, LOW);
-    delay(100);
   }
 }
