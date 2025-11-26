@@ -1,0 +1,159 @@
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include <OneWire.h>
+#include <DallasTemperature.h>
+
+const int BUTTON_FORWARD = 2;
+const int BUTTON_BACK = 3;
+const int BUTTON_SELECT = 4;
+const int TEMP_SENSOR_PIN = 5;
+const int HEATER_PIN = 6;
+const int VALVE_PIN = 7;
+const int BUZZER_PIN = 8;
+
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+OneWire oneWire(TEMP_SENSOR_PIN);
+DallasTemperature tempSensor(&oneWire);
+
+enum Mode {
+  MODE_DISPLAY,
+  MODE_SET_TEMP,
+  MODE_WATERING
+};
+
+Mode currentMode = MODE_DISPLAY;
+int targetTemperature = 25;
+int currentTemperature = 0;
+bool wateringActive = false;
+unsigned long lastWateringTime = 0;
+const unsigned long WATERING_INTERVAL = 3600000;
+
+void setup() {
+  Serial.begin(9600);
+  pinMode(BUTTON_FORWARD, INPUT_PULLUP);
+  pinMode(BUTTON_BACK, INPUT_PULLUP);
+  pinMode(BUTTON_SELECT, INPUT_PULLUP);
+  pinMode(HEATER_PIN, OUTPUT);
+  pinMode(VALVE_PIN, OUTPUT);
+  pinMode(BUZZER_PIN, OUTPUT);
+  digitalWrite(HEATER_PIN, LOW);
+  digitalWrite(VALVE_PIN, LOW);
+  lcd.init();
+  lcd.backlight();
+  lcd.print("Система полива");
+  lcd.setCursor(0, 1);
+  lcd.print("инициализация...");
+  tempSensor.begin();
+  delay(2000);
+  lcd.clear();
+  Serial.println("Система запущена!");
+  beep();
+}
+
+void loop() {
+  readSensors();
+  handleButtons();
+  controlWateringAndHeating();
+  updateDisplay();
+  delay(100);
+}
+
+void readSensors() {
+  tempSensor.requestTemperatures();
+  currentTemperature = (int)tempSensor.getTempCByIndex(0);
+  Serial.print("Температура: ");
+  Serial.print(currentTemperature);
+  Serial.println("°C");
+}
+
+void handleButtons() {
+  if (buttonPressed(BUTTON_FORWARD)) {
+    beep();
+    delay(300);
+  }
+  if (buttonPressed(BUTTON_BACK)) {
+    beep();
+    delay(300);
+  }
+  if (buttonPressed(BUTTON_SELECT)) {
+    if (currentMode == MODE_DISPLAY) {
+      currentMode = MODE_SET_TEMP;
+      beep(2);
+    } else if (currentMode == MODE_SET_TEMP) {
+      currentMode = MODE_DISPLAY;
+      beep(3);
+    }
+    delay(300);
+  }
+}
+
+bool buttonPressed(int pin) {
+  return digitalRead(pin) == LOW;
+}
+
+void controlWateringAndHeating() {
+  unsigned long currentTime = millis();
+  if (currentTemperature < targetTemperature) {
+    analogWrite(HEATER_PIN, 255);
+    Serial.println("Нагреватель: ВКЛ");
+  } else if (currentTemperature > targetTemperature + 2) {
+    digitalWrite(HEATER_PIN, LOW);
+    Serial.println("Нагреватель: ВЫКЛ");
+  }
+  if ((currentTime - lastWateringTime > WATERING_INTERVAL) && !wateringActive) {
+    startWatering();
+    wateringActive = true;
+    lastWateringTime = currentTime;
+  } else if (wateringActive && (currentTime - lastWateringTime > 300000)) { // полив 5 минут
+    stopWatering();
+    wateringActive = false;
+  }
+}
+
+void startWatering() {
+  digitalWrite(VALVE_PIN, HIGH);
+  beep();
+  Serial.println("ПОЛИВ: НАЧАТ");
+}
+
+void stopWatering() {
+  digitalWrite(VALVE_PIN, LOW);
+  beep(2);
+  Serial.println("ПОЛИВ: ОСТАНОВЛЕН");
+}
+
+void updateDisplay() {
+  lcd.clear();
+  if (currentMode == MODE_DISPLAY) {
+    lcd.print("T:");
+    lcd.print(currentTemperature);
+    lcd.print("C");
+    lcd.setCursor(0, 1);
+    lcd.print("Цель:");
+    lcd.print(targetTemperature);
+    lcd.print("C ");
+    if (digitalRead(HEATER_PIN) == HIGH) {
+      lcd.print("[H]");
+    } else {
+      lcd.print("   ");
+    }
+    if (digitalWrite(VALVE_PIN) == HIGH) {
+      lcd.print("[W]");
+    }
+  } else if (currentMode == MODE_SET_TEMP) {
+    lcd.print("Установка Temp:");
+    lcd.print(targetTemperature);
+    lcd.print("C");
+    lcd.setCursor(0, 1);
+    lcd.print("Нажми выбор->OK");
+  }
+}
+
+void beep(int count = 1) {
+  for (int i = 0; i < count; i++) {
+    digitalWrite(BUZZER_PIN, HIGH);
+    delay(100);
+    digitalWrite(BUZZER_PIN, LOW);
+    delay(100);
+  }
+}
